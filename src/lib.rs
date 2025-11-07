@@ -1,14 +1,11 @@
-mod detector;
-mod platform;
+mod detect;
 mod types;
 mod utils;
-mod version;
+mod exec;
 
 pub use types::{DetectionError, Terminal, TerminalInfo};
 
-use detector::DetectionCoordinator;
 
 pub fn which_terminal() -> Option<TerminalInfo> {
-    let coordinator = DetectionCoordinator::new();
-    coordinator.detect()
+     detect::detect()
 }

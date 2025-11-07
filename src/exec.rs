@@ -1,5 +1,5 @@
 /// Executable query-based version extraction
-use crate::types::Terminal;
+use crate::{types::Terminal, utils};
 use std::process::Command;
 
 fn query_command(cmd: &str, args: &[&str]) -> Option<String> {
@@ -10,8 +10,7 @@ fn query_command(cmd: &str, args: &[&str]) -> Option<String> {
         let stderr = String::from_utf8_lossy(&output.stderr);
 
         // Try to extract version from output
-        extract_version_from_output(&stdout)
-            .or_else(|| extract_version_from_output(&stderr))
+        extract_version_from_output(&stdout).or_else(|| extract_version_from_output(&stderr))
     } else {
         None
     }
@@ -49,6 +48,10 @@ pub(crate) fn extract(terminal: &Terminal) -> Option<String> {
         Terminal::Konsole => query_command("konsole", &["--version"]),
         Terminal::XTerm => query_command("xterm", &["-version"]),
         Terminal::Tilix => query_command("tilix", &["--version"]),
+        Terminal::Termux => utils::get_env("TERMUX_VERSION"),
+        Terminal::AppleTerminal | Terminal::ITerm2 | Terminal::Hyper | Terminal::Tabby => {
+            utils::get_env("TERM_PROGRAM_VERSION")
+        }
         #[cfg(target_os = "windows")]
         Terminal::WindowsTerminal => {
             // Try PowerShell command to get Windows Terminal version
