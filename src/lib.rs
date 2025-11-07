@@ -1,21 +1,9 @@
 mod exec;
 mod types;
 mod utils;
-
-/// Unified terminal detection for all platforms
-///
-/// This module consolidates detection logic for all platforms to handle
-/// cross-platform scenarios (e.g., SSH connections, remote terminals)
-///
-/// Detection priority:
-/// 1. TERM_PROGRAM (most reliable)
-/// 2. Highly specific environment variables (WT_SESSION, TERMUX_VERSION, etc.)
-/// 3. Terminal-specific environment variables
-/// 4. TERM environment variable patterns
-/// 5. Generic fallback
-use crate::exec::extract;
-use crate::types::{Terminal, TerminalInfo};
+use exec::extract;
 use std::path::Path;
+pub use types::{Terminal, TerminalInfo};
 
 /// Detects the terminal using a comprehensive strategy
 pub fn which_terminal() -> Option<TerminalInfo> {
