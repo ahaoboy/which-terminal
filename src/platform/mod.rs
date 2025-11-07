@@ -1,23 +1,227 @@
-/// Platform-specific terminal detection modules
-#[cfg(target_os = "windows")]
-pub mod windows;
+/// Unified terminal detection for all platforms
+///
+/// This module consolidates detection logic for all platforms to handle
+/// cross-platform scenarios (e.g., SSH connections, remote terminals)
 
-#[cfg(target_os = "macos")]
-pub mod macos;
+use crate::types::{Terminal, TerminalInfo};
+use crate::utils;
+use crate::version::exec::extract;
+use crate::version::{env::EnvVersionExtractor , VersionExtractor};
+use std::path::Path;
 
-#[cfg(target_os = "linux")]
-pub mod linux;
+/// Unified detector that works across all platforms
+pub struct UnifiedDetector;
 
-#[cfg(target_os = "android")]
-pub mod android;
+impl UnifiedDetector {
+    /// Detects the terminal using a comprehensive strategy
+    pub fn detect() -> Option<TerminalInfo> {
+        // Try Windows-specific terminals
+        if let Some(info) = Self::detect_windows_terminals() {
+            return Some(info);
+        }
 
-use crate::types::TerminalInfo;
+        // Try macOS-specific terminals
+        if let Some(info) = Self::detect_macos_terminals() {
+            return Some(info);
+        }
 
-/// Trait for platform-specific terminal detectors
-pub trait PlatformDetector {
-    /// Attempts to detect the terminal on this platform
-    fn detect(&self) -> Option<TerminalInfo>;
+        // Try Linux-specific terminals
+        if let Some(info) = Self::detect_linux_terminals() {
+            return Some(info);
+        }
 
-    /// Checks if this detector is applicable for the current platform
-    fn is_applicable(&self) -> bool;
+        // Try Android-specific terminals
+        if let Some(info) = Self::detect_android_terminals() {
+            return Some(info);
+        }
+
+        // Try cross-platform terminals
+        if let Some(info) = Self::detect_cross_platform_terminals() {
+            return Some(info);
+        }
+
+        // Generic fallback
+        Self::detect_generic()
+    }
+
+    /// Detects Windows-specific terminals
+    fn detect_windows_terminals() -> Option<TerminalInfo> {
+        // Windows Terminal
+        if utils::has_env("WT_SESSION") || utils::has_env("WT_PROFILE_ID") {
+            let version = extract(&Terminal::WindowsTerminal);
+            return Some(TerminalInfo::with_version(
+                Terminal::WindowsTerminal,
+                version,
+            ));
+        }
+
+        // ConEmu
+        if utils::has_env("ConEmuPID") || utils::has_env("ConEmuBuild") {
+            let version = utils::get_env("ConEmuBuild");
+            return Some(TerminalInfo::with_version(Terminal::ConEmu, version));
+        }
+
+        // Cmder
+        if utils::has_env("CMDER_ROOT") {
+            return Some(TerminalInfo::new(Terminal::Cmder));
+        }
+
+        // PowerShell
+        if utils::has_env("PSModulePath") {
+            return Some(TerminalInfo::new(Terminal::PowerShell));
+        }
+
+        // Command Prompt
+        if utils::has_env("COMSPEC") && !utils::has_env("PSModulePath") {
+            return Some(TerminalInfo::new(Terminal::CommandPrompt));
+        }
+
+        None
+    }
+
+    /// Detects macOS-specific terminals
+    fn detect_macos_terminals() -> Option<TerminalInfo> {
+        // Check TERM_PROGRAM (primary detection method on macOS)
+        if let Some(term_program) = utils::get_env("TERM_PROGRAM") {
+            let (terminal, version) = match term_program.as_str() {
+                "Apple_Terminal" => {
+                    let version = EnvVersionExtractor.extract(&Terminal::AppleTerminal);
+                    (Terminal::AppleTerminal, version)
+                }
+                "iTerm.app" => {
+                    let version = EnvVersionExtractor.extract(&Terminal::ITerm2);
+                    (Terminal::ITerm2, version)
+                }
+                _ => return None,
+            };
+
+            return Some(TerminalInfo::with_version(terminal, version));
+        }
+
+        // Check for iTerm2 via session ID
+        if utils::has_env("ITERM_SESSION_ID") {
+            let version = EnvVersionExtractor.extract(&Terminal::ITerm2);
+            return Some(TerminalInfo::with_version(Terminal::ITerm2, version));
+        }
+
+        None
+    }
+
+    /// Detects Linux-specific terminals
+    fn detect_linux_terminals() -> Option<TerminalInfo> {
+        // GNOME Terminal
+        if utils::has_env("GNOME_TERMINAL_SERVICE") || utils::has_env("GNOME_TERMINAL_SCREEN") {
+            let version = extract(&Terminal::GnomeTerminal);
+            return Some(TerminalInfo::with_version(
+                Terminal::GnomeTerminal,
+                version,
+            ));
+        }
+
+        // Konsole
+        if utils::has_env("KONSOLE_VERSION") || utils::has_env("KONSOLE_DBUS_SESSION") {
+            let version = EnvVersionExtractor
+                .extract(&Terminal::Konsole)
+                .or_else(|| extract(&Terminal::Konsole));
+            return Some(TerminalInfo::with_version(Terminal::Konsole, version));
+        }
+
+        // Terminator
+        if utils::has_env("TERMINATOR_UUID") {
+            return Some(TerminalInfo::new(Terminal::Terminator));
+        }
+
+        // Tilix
+        if utils::has_env("TILIX_ID") {
+            let version = extract(&Terminal::Tilix);
+            return Some(TerminalInfo::with_version(Terminal::Tilix, version));
+        }
+
+        // XTerm
+        if utils::env_contains("TERM", "xterm") && !utils::has_env("TERM_PROGRAM") {
+            let version = extract(&Terminal::XTerm);
+            return Some(TerminalInfo::with_version(Terminal::XTerm, version));
+        }
+
+        // Rxvt
+        if utils::env_contains("TERM", "rxvt") {
+            return Some(TerminalInfo::new(Terminal::Rxvt));
+        }
+
+        None
+    }
+
+    /// Detects Android-specific terminals
+    fn detect_android_terminals() -> Option<TerminalInfo> {
+        // Termux via TERMUX_VERSION
+        if let Some(version) = utils::get_env("TERMUX_VERSION") {
+            return Some(TerminalInfo::with_version(Terminal::Termux, Some(version)));
+        }
+
+        // Termux via PREFIX
+        if let Some(prefix) = utils::get_env("PREFIX") {
+            if prefix.contains("com.termux") {
+                let version = EnvVersionExtractor.extract(&Terminal::Termux);
+                return Some(TerminalInfo::with_version(Terminal::Termux, version));
+            }
+        }
+
+        // Termux installation directory
+        if Path::new("/data/data/com.termux").exists() {
+            let version = EnvVersionExtractor.extract(&Terminal::Termux);
+            return Some(TerminalInfo::with_version(Terminal::Termux, version));
+        }
+
+        None
+    }
+
+    /// Detects cross-platform terminals (work on multiple OSes)
+    fn detect_cross_platform_terminals() -> Option<TerminalInfo> {
+        // Check TERM_PROGRAM for cross-platform terminals
+        if let Some(term_program) = utils::get_env("TERM_PROGRAM") {
+            let (terminal, version) = match term_program.as_str() {
+                "Hyper" => {
+                    let version = EnvVersionExtractor.extract(&Terminal::Hyper);
+                    (Terminal::Hyper, version)
+                }
+                "Tabby" => {
+                    let version = EnvVersionExtractor.extract(&Terminal::Tabby);
+                    (Terminal::Tabby, version)
+                }
+                "WezTerm" => {
+                    let version = EnvVersionExtractor
+                        .extract(&Terminal::WezTerm)
+                        .or_else(|| extract(&Terminal::WezTerm));
+                    (Terminal::WezTerm, version)
+                }
+                _ => return None,
+            };
+
+            return Some(TerminalInfo::with_version(terminal, version));
+        }
+
+        // Alacritty
+        if utils::env_contains("TERM", "alacritty") {
+            let version = extract(&Terminal::Alacritty);
+            return Some(TerminalInfo::with_version(Terminal::Alacritty, version));
+        }
+
+        // Kitty
+        if utils::has_env("KITTY_WINDOW_ID") || utils::env_contains("TERM", "kitty") {
+            let version = extract(&Terminal::Kitty);
+            return Some(TerminalInfo::with_version(Terminal::Kitty, version));
+        }
+
+        None
+    }
+
+    /// Generic fallback detection using TERM environment variable
+    fn detect_generic() -> Option<TerminalInfo> {
+        if let Some(term) = utils::get_env("TERM") {
+            let terminal = Terminal::Generic(term.clone());
+            Some(TerminalInfo::new(terminal))
+        } else {
+            None
+        }
+    }
 }
