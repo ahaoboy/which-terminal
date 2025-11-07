@@ -5,6 +5,7 @@ use std::str::FromStr;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Terminal {
     // Windows terminals
+    #[allow(clippy::enum_variant_names)]
     WindowsTerminal,
     CommandPrompt,
     PowerShell,
@@ -12,6 +13,7 @@ pub enum Terminal {
     Cmder,
 
     // macOS terminals
+    #[allow(clippy::enum_variant_names)]
     AppleTerminal,
     ITerm2,
 
@@ -21,8 +23,11 @@ pub enum Terminal {
     Hyper,
     WezTerm,
     Tabby,
+    VSCode,
+    Kiro,
 
     // Linux terminals
+    #[allow(clippy::enum_variant_names)]
     GnomeTerminal,
     Konsole,
     XTerm,
@@ -52,6 +57,8 @@ impl fmt::Display for Terminal {
             Terminal::Hyper => write!(f, "Hyper"),
             Terminal::WezTerm => write!(f, "WezTerm"),
             Terminal::Tabby => write!(f, "Tabby"),
+            Terminal::VSCode => write!(f, "VSCode"),
+            Terminal::Kiro => write!(f, "Kiro"),
             Terminal::GnomeTerminal => write!(f, "GNOME Terminal"),
             Terminal::Konsole => write!(f, "Konsole"),
             Terminal::XTerm => write!(f, "XTerm"),
@@ -81,6 +88,8 @@ impl FromStr for Terminal {
             "hyper" => Ok(Terminal::Hyper),
             "wezterm" => Ok(Terminal::WezTerm),
             "tabby" => Ok(Terminal::Tabby),
+            "vscode" | "visual studio code" => Ok(Terminal::VSCode),
+            "kiro" => Ok(Terminal::Kiro),
             "gnome-terminal" | "gnome terminal" => Ok(Terminal::GnomeTerminal),
             "konsole" => Ok(Terminal::Konsole),
             "xterm" | "xterm-256color" => Ok(Terminal::XTerm),
@@ -158,32 +167,3 @@ impl FromStr for TerminalInfo {
         }
     }
 }
-
-/// Detection error types
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DetectionError {
-    /// No terminal could be detected
-    NoTerminalDetected,
-    /// Partial detection succeeded but some information is missing
-    PartialDetection(String),
-    /// Version query failed
-    VersionQueryFailed(String),
-}
-
-impl fmt::Display for DetectionError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            DetectionError::NoTerminalDetected => {
-                write!(f, "No terminal could be detected")
-            }
-            DetectionError::PartialDetection(msg) => {
-                write!(f, "Partial detection: {}", msg)
-            }
-            DetectionError::VersionQueryFailed(msg) => {
-                write!(f, "Version query failed: {}", msg)
-            }
-        }
-    }
-}
-
-impl std::error::Error for DetectionError {}
